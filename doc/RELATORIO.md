@@ -580,43 +580,84 @@ sua dependência e um que perde só a parte que dependia dela.
 | Entrada inválida  | `ab`                             | 422 com detalhe do campo                       |
 | Disponibilidade   | `GET /health`                    | 200, `{"status":"ok"}`                         |
 
-Transcrição da execução, com o servidor rodando via `uvicorn api.main:app`:
+Transcrição completa das três requisições, com o servidor rodando via
+`uvicorn api.main:app`. Cada bloco traz o comando exato e a resposta integral.
+
+**Requisição 1 — solicitação dentro do domínio.** O caminho completo: classificador,
+busca semântica e geração pelo LLM.
 
 ```console
 $ curl -X POST http://127.0.0.1:8000/solicitacao \
     -H "Content-Type: application/json" \
-    -d '{"texto":"How do I cancel my order?"}'
-
-{"categoria":"ORDER",
- "resposta":"Compreendo que você tem uma dúvida sobre o cancelamento do seu
- pedido. Estou aqui para te fornecer as informações necessárias! Por favor, me
- informe o número do seu pedido (e os detalhes da sua dúvida) para que eu possa
- te auxiliar no processo.",
- "fontes":[{"similaridade":0.683,"secao":"## [ORDER] cancel_order"},
-           {"similaridade":0.55,"secao":"## [CANCEL] check_cancellation_fee"},
-           {"similaridade":0.433,"secao":"## [ORDER] place_order"}]}
-[HTTP 200 | 9.561140s]
-
-$ curl -X POST ... -d '{"texto":"What is the capital of France?"}'
-
-{"categoria":"ACCOUNT",
- "resposta":"Não encontrei essa informação na base de conhecimento.",
- "fontes":[]}
-[HTTP 200 | 0.115337s]
-
-$ curl -X POST ... -d '{"texto":"ab"}'
-
-{"detail":[{"type":"string_too_short","loc":["body","texto"],
-            "msg":"String should have at least 3 characters",
-            "input":"ab","ctx":{"min_length":3}}]}
-[HTTP 422]
-
-$ curl http://127.0.0.1:8000/health
-{"status":"ok"}
-[HTTP 200]
+    -d '{"texto": "How do I cancel my order?"}'
 ```
 
-Vale notar um detalhe do segundo caso: a categoria devolvida é ACCOUNT, porque o
+```json
+{
+  "categoria": "ORDER",
+  "resposta": "Para que eu possa ajudar você a cancelar o seu pedido, por favor, informe o número do pedido. Estou à disposição para tirar suas dúvidas e farei o possível para auxiliá-lo(a) nesse processo.",
+  "fontes": [
+    { "similaridade": 0.683, "secao": "## [ORDER] cancel_order" },
+    { "similaridade": 0.55,  "secao": "## [CANCEL] check_cancellation_fee" },
+    { "similaridade": 0.433, "secao": "## [ORDER] place_order" }
+  ]
+}
+```
+
+`HTTP 200` em **4,638 s**. A categoria ORDER está correta, e as fontes mostram que a
+seção recuperada com maior similaridade é exatamente `cancel_order` — a recuperação
+acertou o alvo, não só um vizinho temático.
+
+**Requisição 2 — pergunta fora do domínio.** Aciona o curto-circuito por limiar, sem
+chamar o LLM.
+
+```console
+$ curl -X POST http://127.0.0.1:8000/solicitacao \
+    -H "Content-Type: application/json" \
+    -d '{"texto": "What is the capital of France?"}'
+```
+
+```json
+{
+  "categoria": "ACCOUNT",
+  "resposta": "Não encontrei essa informação na base de conhecimento.",
+  "fontes": []
+}
+```
+
+`HTTP 200` em **0,027 s** — 170 vezes mais rápido que a requisição 1, porque nenhuma
+chamada externa foi feita. O `fontes: []` é a assinatura do curto-circuito: nenhum dos
+27 chunks passou do limiar de 0,30, então nem entraram na resposta.
+
+**Requisição 3 — entrada inválida.** Rejeitada pelo Pydantic antes de chegar ao
+modelo.
+
+```console
+$ curl -X POST http://127.0.0.1:8000/solicitacao \
+    -H "Content-Type: application/json" \
+    -d '{"texto": "ab"}'
+```
+
+```json
+{
+  "detail": [
+    {
+      "type": "string_too_short",
+      "loc": ["body", "texto"],
+      "msg": "String should have at least 3 characters",
+      "input": "ab",
+      "ctx": { "min_length": 3 }
+    }
+  ]
+}
+```
+
+`HTTP 422` em **0,001 s**. Três ordens de magnitude mais rápido que o caminho
+completo, porque a requisição não passa da camada de validação: nem o classificador
+nem os embeddings são acionados. O corpo do erro identifica o campo (`loc`), a regra
+violada (`type`) e o valor recebido (`input`).
+
+Vale notar um detalhe da requisição 2: a categoria devolvida é ACCOUNT, porque o
 classificador **sempre** devolve uma das 11 classes — ele não tem opção de "nenhuma".
 Para "What is the capital of France?" essa predição é lixo, e é o RAG que salva a
 resposta ao dizer que não sabe. Isso ilustra a assimetria entre os dois componentes:
@@ -703,28 +744,43 @@ branco.
 
 ### 7.2 Custo e latência do RAG
 
-Latências medidas na verificação da seção 6:
+Latências medidas nas execuções da seção 6.1, em duas rodadas separadas:
 
-| Caminho                                   | Latência             |
-| ----------------------------------------- | -------------------- |
-| Classificador (TF-IDF + LogReg)           | poucos milissegundos |
-| Busca semântica (27 chunks)               | ~10 ms               |
-| Curto-circuito (fora do domínio, sem LLM) | **0,115 s**          |
-| Pipeline completo com chamada ao Gemini   | **9,56 s**           |
+| Caminho                                       | Latência              |
+| --------------------------------------------- | --------------------- |
+| Validação Pydantic rejeitando a entrada (422) | **0,001 s**           |
+| Classificador (TF-IDF + LogReg)               | poucos milissegundos  |
+| Busca semântica (27 chunks)                   | ~10 ms                |
+| Curto-circuito (fora do domínio, sem LLM)     | **0,027 – 0,115 s**   |
+| Pipeline completo com chamada ao Gemini       | **4,64 – 9,56 s**     |
 
-A chamada ao LLM domina o tempo total em duas ordens de magnitude — o caminho com
-LLM é **83x mais lento** que o caminho sem. Isso tem três consequências práticas:
+As duas últimas linhas são faixas porque as medi em momentos diferentes e os valores
+variaram bastante: a mesma requisição "How do I cancel my order?" levou 9,56 s numa
+rodada e 4,64 s em outra. A variação não está no nosso código — o classificador e a
+busca são determinísticos e somam milissegundos. Ela está inteira na chamada externa,
+e é uma característica de operar sobre um LLM de terceiros: a latência é do provedor,
+oscila com a carga dele, e não é controlável do nosso lado. É o mesmo motivo que
+produziu o `503 UNAVAILABLE` da seção 6.
+
+**Consequência para dimensionamento:** não faz sentido prometer um SLA de latência
+apertado para o caminho que passa pelo LLM. O que se pode prometer é o caminho que
+não passa por ele.
+
+A chamada ao LLM domina o tempo total em duas ordens de magnitude — mesmo no melhor
+caso medido, o caminho com LLM é **~170x mais lento** que o curto-circuito. Isso tem
+três consequências práticas:
 
 **O curto-circuito por limiar é uma decisão de custo, não só de qualidade.** Toda
-pergunta fora do domínio que ele intercepta é uma chamada de API não gasta e 9
+pergunta fora do domínio que ele intercepta é uma chamada de API não gasta e vários
 segundos economizados. Numa operação real, onde parte do tráfego é ruído, isso é a
 diferença entre viável e caro.
 
-**9,5 segundos é aceitável no design escolhido, e não seria em outro.** O sistema
-sugere resposta para um atendente humano, que leva mais tempo que isso só para ler a
-mensagem do cliente. Se o mesmo pipeline fosse exposto direto ao cliente num chat, 9
-segundos de silêncio seria inaceitável, e a saída seria streaming da resposta ou um
-modelo menor.
+**Alguns segundos de espera são aceitáveis no design escolhido, e não seriam em
+outro.** O sistema sugere resposta para um atendente humano, que leva mais tempo que
+isso só para ler a mensagem do cliente. Se o mesmo pipeline fosse exposto direto ao
+cliente num chat, um silêncio que às vezes é de 5 e às vezes de 10 segundos seria
+inaceitável — e o problema não seria só a média, seria a imprevisibilidade. A saída
+nesse cenário seria streaming da resposta ou um modelo menor.
 
 **Quando o LLM não vale a pena.** Para as 27 intenções que a base já cobre com uma
 resposta canônica, devolver o texto do chunk recuperado seria instantâneo, gratuito e
