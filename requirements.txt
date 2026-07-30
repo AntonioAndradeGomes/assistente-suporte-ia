@@ -1,0 +1,21 @@
+# Assistente Inteligente de Suporte
+# Instalar com:  pip install -r requirements.txt
+
+# --- Dados e visualização (Fase 1) ---
+datasets==4.5.0
+pandas==2.3.3
+numpy==2.0.2
+matplotlib==3.9.4
+
+# --- Classificador (Fase 1) ---
+scikit-learn==1.6.1
+joblib==1.5.3
+
+# --- RAG: embeddings + LLM (Fase 2) ---
+sentence-transformers==5.1.2
+google-genai==1.47.0
+python-dotenv==1.2.1
+
+# --- API (Fase 3) ---
+fastapi==0.128.8
+uvicorn==0.39.0
