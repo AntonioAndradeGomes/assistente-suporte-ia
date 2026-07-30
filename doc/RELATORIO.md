@@ -57,10 +57,31 @@ atendente precisa ver de onde a resposta saiu para decidir se confia nela.
 Fonte única: [Bitext Customer Support](https://huggingface.co/datasets/bitext/Bitext-customer-support-llm-chatbot-training-dataset),
 26.872 solicitações de clientes em inglês.
 
-A escolha de um dataset só, para os dois componentes, foi deliberada. A coluna
-`instruction` + `category` treina o classificador; a coluna `response` monta a base
-do RAG. Assim os dois componentes falam do mesmo domínio — se o classificador
-roteia uma mensagem para REFUND, a base do RAG tem conteúdo sobre reembolso.
+**Estrutura.** Cinco colunas, das quais usamos quatro:
+
+| Coluna | Conteúdo | Uso no projeto |
+| --- | --- | --- |
+| `instruction` | O que o cliente escreve | Feature do classificador |
+| `category` | 11 valores (ORDER, REFUND, …) | **Rótulo** do classificador |
+| `intent` | 27 valores (`cancel_order`, `get_refund`, …) | Chave de agrupamento da base do RAG |
+| `response` | O que o atendente responderia | **Conteúdo** da base do RAG |
+| `flags` | Tags de variação linguística (`BL`, `BLQ`, `BIL`…) | Não usado |
+
+A escolha de um dataset só, para os dois componentes, foi deliberada, e o que a
+viabiliza é o dataset ter **duas colunas de texto com papéis opostos**.
+`instruction` vem rotulada, então serve para aprendizado supervisionado.
+`response` é texto corrido sem rótulo — inútil para classificar, mas é exatamente o
+formato de uma base de conhecimento. Assim os dois componentes falam do mesmo
+domínio: se o classificador roteia uma mensagem para REFUND, a base do RAG tem
+conteúdo sobre reembolso.
+
+**A hierarquia `category` ⊃ `intent` é usada nas duas pontas, em granularidades
+diferentes.** ORDER contém `cancel_order`, `change_order`, `place_order` e
+`track_order`. O classificador prevê `category`, porque é a granularidade do
+roteamento — quem atende cancelamento também atende alteração de pedido, então
+distinguir os dois não mudaria o destino da mensagem. O RAG, ao contrário, indexa por
+`intent`, porque ali a granularidade fina é vantagem: `cancel_order` e `track_order`
+exigem respostas distintas, e misturá-las degradaria a recuperação.
 
 **Distribuição das 11 categorias** (desbalanceada, razão de 6,3x entre extremos):
 
@@ -214,18 +235,41 @@ A hipótese **não se confirmou**: o F1 não se move. As duplicatas não explica
 resultado.
 
 **Segunda hipótese, essa sim sustentada: o dataset é sintético e quase
-linearmente separável.** Três evidências independentes apontam para isso:
+linearmente separável.** Quatro evidências independentes apontam para isso, a
+primeira delas conclusiva:
 
-- **Uniformidade dos textos.** Média de 8,7 palavras com desvio de 2,6, e máximo de 16. Mensagens reais de suporte não têm essa regularidade — variam de "help" a
-  parágrafos inteiros. Isso é assinatura de geração por template.
+- **O dataset declara a própria natureza de template.** Os textos contêm
+  placeholders literais, com chaves duplas, não substituídos. Um exemplo de linha
+  crua, na íntegra:
+
+  ```
+  instruction : question about cancelling order {{Order Number}}
+  category    : ORDER
+  intent      : cancel_order
+  response    : I've understood you have a question regarding canceling order
+                {{Order Number}}, and I'm here to provide you with the information
+                you need. Please go ahead and ask your question, and I'll do my
+                best to assist you.
+  ```
+
+  Medindo a prevalência: **24,8% das `instruction` (6.670 de 26.872) e 48,4% das
+  `response` (13.006) contêm `{{...}}`**. Não é inferência sobre o estilo do texto —
+  é o mecanismo de geração aparecendo no dado.
+
+- **Uniformidade dos textos.** Média de 8,7 palavras com desvio de 2,6, e máximo de
+  16. Mensagens reais de suporte não têm essa regularidade — variam de "help" a
+  parágrafos inteiros. É o efeito esperado de gerar frases a partir de um número
+  pequeno de moldes.
 - **Os termos discriminantes são quase um dicionário.** A seção 4 mostra que
   `account` prediz ACCOUNT, `refund` prediz REFUND, `invoice` prediz INVOICE. A
   tarefa degenerou em busca de palavra-chave; quase não há ambiguidade lexical para
   o modelo resolver.
 - **O modelo aprendeu artefatos do template.** Entre os 8 termos mais indicativos de
-  INVOICE estão os literais `00108`, `37777`, `85632`, `12588` — números de fatura
-  dos placeholders. Não é conhecimento linguístico, é decoreba de um artefato da
-  geração dos dados, e não generalizaria para uma fatura com outro número.
+  INVOICE estão os literais `00108`, `37777`, `85632`, `12588`. Com a evidência dos
+  placeholders, isso fica explicado: são casos em que o `{{Invoice Number}}` **foi**
+  preenchido, e o gerador sorteou de um conjunto pequeno de valores. O modelo decorou
+  esses valores específicos. Não é conhecimento linguístico, e não generalizaria para
+  uma fatura com outro número.
 
 **Conclusão.** 0,9964 mede a separabilidade do Bitext, não a dificuldade de
 classificar suporte real. Em produção, com linguagem espontânea, gírias, typos,
