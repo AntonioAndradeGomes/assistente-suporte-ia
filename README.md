@@ -17,7 +17,7 @@ fase2_rag.py                   Componente B - base de conhecimento, embeddings, 
 api/main.py                    Componente C - API FastAPI integrando A e B
 monitoramento_drift.py         Diferencial  - detecção de drift com Kolmogorov-Smirnov
 doc/RELATORIO.md               Relatório técnico e reflexão sobre operação (Componente D)
-doc/*.png                      Gráficos gerados pela Fase 1 (distribuição, matrizes de confusão)
+doc/*.png                      Gráficos da Fase 1 e capturas da documentação da API
 data/base_conhecimento.md      Base do RAG (gerada pela Fase 2 a partir do Bitext)
 modelo_classificador.joblib    Pipeline vencedor, carregado pela API no startup
 Dockerfile                     Containerização da API (diferencial)

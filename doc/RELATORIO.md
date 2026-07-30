@@ -487,6 +487,18 @@ na geração (trecho certo, resposta ruim) — sem isso, depurar um RAG é adivi
 FastAPI com dois endpoints. `POST /solicitacao` recebe o texto e devolve categoria,
 resposta e fontes; `GET /health` para checagem de disponibilidade.
 
+A documentação interativa em `/docs` é gerada automaticamente a partir dos tipos —
+não há um único arquivo de especificação escrito à mão. Os cinco schemas listados
+(`Solicitacao`, `Resposta`, `Fonte`, `ValidationError`, `HTTPValidationError`) saem
+diretamente dos modelos Pydantic do código:
+
+![Documentação interativa da API em /docs](api_docs_visao_geral.png)
+
+Detalhe do endpoint principal, com a descrição vinda do docstring da função e o
+contrato do corpo da requisição:
+
+![Endpoint POST /solicitacao](api_docs_endpoint_solicitacao.png)
+
 **Validação de entrada.** Pydantic com `Field(min_length=3)`. Um texto de 2
 caracteres é rejeitado com **422** e o detalhe do campo, antes de chegar ao modelo:
 
@@ -503,7 +515,16 @@ caracteres é rejeitado com **422** e o detalhe do campo, antes de chegar ao mod
 ```
 
 A saída também é tipada (`response_model=Resposta`), o que garante o contrato e
-alimenta a documentação automática em `/docs`.
+alimenta a documentação automática em `/docs`. Os dois códigos de resposta possíveis
+aparecem documentados com o schema de cada um — o **200** com `categoria`, `resposta`
+e a lista de `fontes`, e o **422** com o detalhe da falha de validação:
+
+![Schemas de resposta 200 e 422](api_docs_schemas_resposta.png)
+
+Vale notar que o 422 não foi declarado em nenhum lugar do código: o FastAPI o deriva
+do fato de o corpo ser um modelo Pydantic com restrição. É o mesmo mecanismo que
+valida a entrada em tempo de execução e que documenta a validação para quem consome
+a API.
 
 **Carregamento único no startup.** O `lifespan` do FastAPI carrega o `.joblib`,
 instancia o modelo de embeddings e indexa os 27 chunks **uma vez**, guardando tudo
