@@ -12,14 +12,18 @@ Tudo servido por uma API FastAPI.
 ## Arquitetura
 
 ```
-fase1_classificador.py   Componente A - TF-IDF + LogReg/NaiveBayes, avaliação e XAI
-fase2_rag.py             Componente B - base de conhecimento, embeddings, busca semântica, Gemini
-api/main.py              Componente C - API FastAPI integrando A e B
-monitoramento_drift.py   Diferencial  - detecção de drift com teste de Kolmogorov-Smirnov
-data/base_conhecimento.md  Base do RAG (gerada pela Fase 2 a partir do Bitext)
-modelo_classificador.joblib  Pipeline vencedor, carregado pela API no startup
-RELATORIO.md             Relatório técnico e reflexão sobre operação (Componente D)
+fase1_classificador.py         Componente A - TF-IDF + LogReg/NaiveBayes, avaliação e XAI
+fase2_rag.py                   Componente B - base de conhecimento, embeddings, busca, Gemini
+api/main.py                    Componente C - API FastAPI integrando A e B
+monitoramento_drift.py         Diferencial  - detecção de drift com Kolmogorov-Smirnov
+doc/RELATORIO.md               Relatório técnico e reflexão sobre operação (Componente D)
+doc/*.png                      Gráficos gerados pela Fase 1 (distribuição, matrizes de confusão)
+data/base_conhecimento.md      Base do RAG (gerada pela Fase 2 a partir do Bitext)
+modelo_classificador.joblib    Pipeline vencedor, carregado pela API no startup
+Dockerfile                     Containerização da API (diferencial)
 ```
+
+📄 **[Leia o relatório técnico completo →](doc/RELATORIO.md)**
 
 Dados: [Bitext Customer Support](https://huggingface.co/datasets/bitext/Bitext-customer-support-llm-chatbot-training-dataset)
 (26.872 solicitações rotuladas). O mesmo dataset alimenta o classificador (coluna
@@ -61,7 +65,8 @@ Baixa o dataset (cacheado em `~/.cache/huggingface`), treina e compara os dois
 modelos, imprime as métricas por classe e gera:
 
 - `modelo_classificador.joblib` — pipeline vencedor, usado pela API
-- `distribuicao_categorias.png`, `matriz_confusao_logreg.png`, `matriz_confusao_naive_bayes.png`
+- `doc/distribuicao_categorias.png`, `doc/matriz_confusao_logreg.png`,
+  `doc/matriz_confusao_naive_bayes.png` — os gráficos que o relatório referencia
 
 O modelo treinado já vem versionado no repositório, então este passo é opcional
 para apenas subir a API.
@@ -139,7 +144,7 @@ do erro.
 
 19 erros em 5.375 exemplos de teste. A discussão desses números — incluindo por
 que eles são altos demais para se levar a sério como estimativa de produção —
-está no [RELATORIO.md](RELATORIO.md).
+está no [relatório](doc/RELATORIO.md).
 
 ## Docker (diferencial)
 
@@ -155,4 +160,4 @@ execução e nunca entra na imagem.
 A imagem é grande porque o wheel padrão do `torch` para Linux embute as bibliotecas
 CUDA, inúteis aqui — a inferência roda em CPU. Este e os outros pontos abertos do
 projeto estão documentados, com a correção de cada um, na
-[seção 7.4 do relatório](RELATORIO.md#74-pontos-abertos-e-próximos-passos).
+[seção 7.4 do relatório](doc/RELATORIO.md#74-pontos-abertos-e-próximos-passos).

@@ -2,7 +2,7 @@
 Diferencial - Monitoramento de drift (Componente D, implementado)
 Projeto: Assistente Inteligente de Suporte
 
-A reflexão sobre operação (RELATORIO.md) argumenta que o classificador precisa ser
+A reflexão sobre operação (doc/RELATORIO.md) argumenta que o classificador precisa ser
 monitorado porque a linguagem dos clientes muda com o tempo. Este script não só
 descreve o problema: simula três cenários de drift e detecta cada um com o teste
 de Kolmogorov-Smirnov, mostrando qual sinal dispara em cada caso.

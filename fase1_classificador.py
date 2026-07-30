@@ -5,6 +5,7 @@ Dataset: Bitext Customer Support (Hugging Face)
 Rode célula a célula num notebook, ou como script:
     python fase1_classificador.py
 """
+from pathlib import Path
 import joblib
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -19,6 +20,12 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay,
     f1_score,
 )
+
+# Os gráficos vão para doc/, junto do relatório que os referencia.
+# Resolvido a partir deste arquivo, então funciona de qualquer diretório.
+DOC_DIR = Path(__file__).resolve().parent / "doc"
+DOC_DIR.mkdir(exist_ok=True)
+
 #1. Carregar o dataset
 #baixa o dataset e guarda em cache local
 ds = load_dataset("bitext/Bitext-customer-support-llm-chatbot-training-dataset")
@@ -39,7 +46,7 @@ print(df["category"].value_counts())
 df["category"].value_counts().plot(kind="barh", figsize=(8, 5))
 plt.title("Distribuição das categorias")
 plt.tight_layout()
-plt.savefig("distribuicao_categorias.png", dpi=120)
+plt.savefig(DOC_DIR / "distribuicao_categorias.png", dpi=120)
 plt.close()
 
 # Tamanho dos textos (também vai para o relatório)
@@ -88,7 +95,7 @@ for nome, pipe in pipelines.items():
     )
     plt.title(f"Matriz de confusão - {nome}")
     plt.tight_layout()
-    plt.savefig(f"matriz_confusao_{nome}.png", dpi=120)
+    plt.savefig(DOC_DIR / f"matriz_confusao_{nome}.png", dpi=120)
     plt.close()
 melhor = max(resultados, key=resultados.get)
 print(f"\nMelhor modelo por F1 macro: {melhor} ({resultados[melhor]:.4f})")
