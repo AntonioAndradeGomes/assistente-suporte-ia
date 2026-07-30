@@ -147,3 +147,7 @@ está no [RELATORIO.md](RELATORIO.md).
 docker build -t assistente-suporte .
 docker run --rm -p 8000:8000 --env-file .env assistente-suporte
 ```
+
+Build verificado (imagem de 3,29 GB); o contêiner sobe e responde em
+<http://127.0.0.1:8000/docs>. A `GEMINI_API_KEY` vem do `--env-file` em tempo de
+execução e nunca entra na imagem.

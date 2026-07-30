@@ -19,6 +19,7 @@ import numpy as np
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from google import genai
+from google.genai import errors as genai_errors
 from pydantic import BaseModel, Field
 from sentence_transformers import SentenceTransformer
 
@@ -84,6 +85,11 @@ app = FastAPI(title="Assistente Inteligente de Suporte", lifespan=lifespan)
 # 3. Lógica do RAG (mesma da Fase 2)
 LIMIAR_SIMILARIDADE = 0.30
 MSG_NAO_ENCONTRADO = "Não encontrei essa informação na base de conhecimento."
+MSG_LLM_INDISPONIVEL = (
+    "Não foi possível gerar a resposta agora: o serviço de geração está "
+    "temporariamente indisponível. Os trechos da base relevantes para esta "
+    "solicitação estão listados em 'fontes'."
+)
 
 PROMPT_RAG = """Você é um assistente de suporte ao cliente.
 Responda a pergunta do cliente com base no contexto abaixo.
@@ -110,14 +116,25 @@ def gerar_resposta_rag(pergunta: str) -> tuple[str, list[Fonte]]:
     if resultados[0][0] < LIMIAR_SIMILARIDADE:
         return MSG_NAO_ENCONTRADO, []
     contexto = "\n\n---\n\n".join(chunk for _, chunk in resultados)
-    resp = recursos["gemini"].models.generate_content(
-        model="gemini-3.6-flash",
-        contents=PROMPT_RAG.format(contexto=contexto, pergunta=pergunta),
-    )
     fontes = [
         Fonte(similaridade=round(sim, 3), secao=chunk.splitlines()[0])
         for sim, chunk in resultados
     ]
+
+    # Degradação graciosa: o LLM é a única dependência externa do sistema, e a que
+    # mais falha (cota estourada, 503 por demanda alta, rede). Se ela cair, a
+    # classificação e a recuperação já funcionaram — devolver 500 jogaria fora esse
+    # trabalho. Preferimos responder 200 com as fontes recuperadas e avisar que a
+    # geração não saiu: o atendente ainda recebe os trechos certos da base.
+    try:
+        resp = recursos["gemini"].models.generate_content(
+            model="gemini-3.6-flash",
+            contents=PROMPT_RAG.format(contexto=contexto, pergunta=pergunta),
+        )
+    except genai_errors.APIError as e:
+        print(f"[WARN] Gemini indisponível ({e.code}): geração degradada.")
+        return MSG_LLM_INDISPONIVEL, fontes
+
     # resp.text vem None se o Gemini bloquear a geração (filtro de segurança).
     # Sem esta guarda, o response_model rejeitaria None e a API devolveria 500.
     return resp.text or MSG_NAO_ENCONTRADO, fontes

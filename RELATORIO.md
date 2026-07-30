@@ -27,17 +27,31 @@ roteia uma mensagem para REFUND, a base do RAG tem conteúdo sobre reembolso.
 
 **Distribuição das 11 categorias** (desbalanceada, razão de 6,3x entre extremos):
 
-| Categoria | N | Categoria | N |
-|---|---|---|---|
-| ACCOUNT | 5.986 | FEEDBACK | 1.997 |
-| ORDER | 3.988 | DELIVERY | 1.994 |
-| REFUND | 2.992 | SHIPPING | 1.970 |
-| INVOICE | 1.999 | SUBSCRIPTION | 999 |
-| CONTACT | 1.999 | CANCEL | 950 |
-| PAYMENT | 1.998 | | |
+| Categoria | N     | Categoria    | N     |
+| --------- | ----- | ------------ | ----- |
+| ACCOUNT   | 5.986 | FEEDBACK     | 1.997 |
+| ORDER     | 3.988 | DELIVERY     | 1.994 |
+| REFUND    | 2.992 | SHIPPING     | 1.970 |
+| INVOICE   | 1.999 | SUBSCRIPTION | 999   |
+| CONTACT   | 1.999 | CANCEL       | 950   |
+| PAYMENT   | 1.998 |              |       |
+
+![Distribuição das categorias](distribuicao_categorias.png)
 
 **Tamanho dos textos:** média de 8,7 palavras (desvio 2,6; mínimo 1; máximo 16).
 São mensagens curtas e uniformes — um fato que volta a ser importante na seção 3.4.
+
+```
+Total de exemplos: 26872
+
+Tamanho dos textos (palavras):
+count    26872.000000
+mean         8.690979
+std          2.605004
+min          1.000000
+50%          9.000000
+max         16.000000
+```
 
 ## 3. Componente A — Classificador
 
@@ -71,10 +85,10 @@ dimensionalidade sem generalizar.
 
 ### 3.3 Duas abordagens comparadas
 
-| Modelo | F1 macro | Erros no teste |
-|---|---|---|
-| **Regressão logística** | **0,9964** | 19 / 5.375 |
-| Multinomial Naive Bayes | 0,9958 | 23 / 5.375 |
+| Modelo                  | F1 macro   | Erros no teste |
+| ----------------------- | ---------- | -------------- |
+| **Regressão logística** | **0,9964** | 19 / 5.375     |
+| Multinomial Naive Bayes | 0,9958     | 23 / 5.375     |
 
 A métrica de seleção é **F1 macro**, não acurácia. Com ACCOUNT valendo 22% do
 dataset e CANCEL valendo 3,5%, a acurácia é dominada pelas classes grandes: um
@@ -87,10 +101,60 @@ diferença tão estreita, o desempate real foi a interpretabilidade: os coeficie
 da LogReg são diretamente legíveis como importância de termo por classe (seção 4),
 o que o Naive Bayes não oferece com a mesma clareza.
 
-Precision, recall e F1 por classe estão na saída completa do
-`classification_report`; nenhuma das 11 classes ficou abaixo de 0,98 em qualquer das
-três métricas. As matrizes de confusão dos dois modelos estão em
-`matriz_confusao_logreg.png` e `matriz_confusao_naive_bayes.png`.
+Precision, recall e F1 **por classe**, saída direta do `classification_report`.
+Nenhuma das 11 classes ficou abaixo de 0,98 em qualquer das três métricas:
+
+```
+============================================================
+Modelo: logreg  (F1 macro: 0.9964)
+============================================================
+              precision    recall  f1-score   support
+
+     ACCOUNT       0.99      1.00      0.99      1197
+      CANCEL       0.99      1.00      0.99       190
+     CONTACT       1.00      1.00      1.00       400
+    DELIVERY       1.00      1.00      1.00       399
+    FEEDBACK       1.00      1.00      1.00       399
+     INVOICE       1.00      1.00      1.00       400
+       ORDER       1.00      1.00      1.00       798
+     PAYMENT       1.00      0.98      0.99       400
+      REFUND       1.00      1.00      1.00       598
+    SHIPPING       1.00      0.98      0.99       394
+SUBSCRIPTION       1.00      0.99      1.00       200
+
+    accuracy                           1.00      5375
+   macro avg       1.00      1.00      1.00      5375
+weighted avg       1.00      1.00      1.00      5375
+
+============================================================
+Modelo: naive_bayes  (F1 macro: 0.9958)
+============================================================
+              precision    recall  f1-score   support
+
+     ACCOUNT       0.99      1.00      1.00      1197
+      CANCEL       1.00      1.00      1.00       190
+     CONTACT       1.00      0.99      1.00       400
+    DELIVERY       0.99      1.00      0.99       399
+    FEEDBACK       1.00      1.00      1.00       399
+     INVOICE       0.99      1.00      1.00       400
+       ORDER       1.00      0.99      1.00       798
+     PAYMENT       1.00      0.99      0.99       400
+      REFUND       1.00      0.99      0.99       598
+    SHIPPING       1.00      0.99      0.99       394
+SUBSCRIPTION       1.00      0.99      0.99       200
+
+    accuracy                           1.00      5375
+   macro avg       1.00      1.00      1.00      5375
+weighted avg       1.00      1.00      1.00      5375
+
+Melhor modelo por F1 macro: logreg (0.9964)
+```
+
+Matrizes de confusão dos dois modelos:
+
+![Matriz de confusão - regressão logística](matriz_confusao_logreg.png)
+
+![Matriz de confusão - Naive Bayes](matriz_confusao_naive_bayes.png)
 
 ### 3.4 Discussão honesta: por que 0,996 não é um número para se orgulhar
 
@@ -104,10 +168,10 @@ literalmente memorizou.
 
 Refiz a avaliação removendo duplicatas antes do split:
 
-| Cenário | LogReg | Naive Bayes |
-|---|---|---|
-| Com duplicatas (26.872 linhas) | 0,9964 | 0,9958 |
-| Sem duplicatas (24.635 linhas) | 0,9964 | 0,9963 |
+| Cenário                        | LogReg | Naive Bayes |
+| ------------------------------ | ------ | ----------- |
+| Com duplicatas (26.872 linhas) | 0,9964 | 0,9958      |
+| Sem duplicatas (24.635 linhas) | 0,9964 | 0,9963      |
 
 A hipótese **não se confirmou**: o F1 não se move. As duplicatas não explicam o
 resultado.
@@ -115,8 +179,7 @@ resultado.
 **Segunda hipótese, essa sim sustentada: o dataset é sintético e quase
 linearmente separável.** Três evidências independentes apontam para isso:
 
-- **Uniformidade dos textos.** Média de 8,7 palavras com desvio de 2,6, e máximo de
-  16. Mensagens reais de suporte não têm essa regularidade — variam de "help" a
+- **Uniformidade dos textos.** Média de 8,7 palavras com desvio de 2,6, e máximo de 16. Mensagens reais de suporte não têm essa regularidade — variam de "help" a
   parágrafos inteiros. Isso é assinatura de geração por template.
 - **Os termos discriminantes são quase um dicionário.** A seção 4 mostra que
   `account` prediz ACCOUNT, `refund` prediz REFUND, `invoice` prediz INVOICE. A
@@ -144,19 +207,37 @@ desbalanceamento, interpretabilidade, monitoramento — e não no F1.
 Os coeficientes da regressão logística indicam quais termos mais empurram um texto
 para cada classe. Extraindo os 8 maiores por categoria:
 
-| Categoria | Termos mais indicativos |
-|---|---|
-| ACCOUNT | account, signup, user, registration, profile |
-| CANCEL | termination, cancellation, withdrawal, penalty, early |
-| CONTACT | customer, agent, contact, speak, talk |
-| DELIVERY | delivery, shipment, arrive, shipping, methods |
-| FEEDBACK | feedback, claim, reclamation, complaint, file |
-| INVOICE | invoice, bill, `00108`, `37777`, `85632` |
-| ORDER | order, purchase, order number, several, product |
-| PAYMENT | payment, payments, modalities, payment methods |
-| REFUND | refund, money, reimbursement, rebate, compensation |
-| SHIPPING | address, delivery address, shipping address |
-| SUBSCRIPTION | newsletter, subscription, unsubscribe, corporate |
+| Categoria    | Termos mais indicativos                               |
+| ------------ | ----------------------------------------------------- |
+| ACCOUNT      | account, signup, user, registration, profile          |
+| CANCEL       | termination, cancellation, withdrawal, penalty, early |
+| CONTACT      | customer, agent, contact, speak, talk                 |
+| DELIVERY     | delivery, shipment, arrive, shipping, methods         |
+| FEEDBACK     | feedback, claim, reclamation, complaint, file         |
+| INVOICE      | invoice, bill, `00108`, `37777`, `85632`              |
+| ORDER        | order, purchase, order number, several, product       |
+| PAYMENT      | payment, payments, modalities, payment methods        |
+| REFUND       | refund, money, reimbursement, rebate, compensation    |
+| SHIPPING     | address, delivery address, shipping address           |
+| SUBSCRIPTION | newsletter, subscription, unsubscribe, corporate      |
+
+A tabela acima está resumida aos 5 primeiros por legibilidade. Saída completa com os
+8 termos de cada categoria, direto do script:
+
+```
+Top 8 termos mais indicativos de cada categoria (LogReg):
+  ACCOUNT: account, signup, user, registration, profile, standard, pro, platinum
+  CANCEL: termination, cancellation, withdrawal, the, penalty, early, charge, charges
+  CONTACT: customer, agent, contact, speak, talk, with, somebody, someone
+  DELIVERY: delivery, shipment, arrive, shipping, methods, options, when, delivery city
+  FEEDBACK: feedback, claim, reclamation, complaint, file, leave, lodge, review
+  INVOICE: invoice, bill, 00108, 37777, 85632, 12588, from, person name
+  ORDER: order, purchase, order number, number, several, some, product, article
+  PAYMENT: payment, payments, with payments, modalities, payment methods, with, online, options
+  REFUND: refund, money, reimbursement, rebate, compensation, refunds, status, reimbursements
+  SHIPPING: address, delivery address, shipping, shipping address, delivery, the address, my address, my
+  SUBSCRIPTION: newsletter, subscription, corporate, to your, unsubscribe, the newsletter, to the, your
+```
 
 O resultado é coerente com o domínio e confirma que os bigramas pegaram sentido
 real: `delivery address` e `shipping address` discriminam SHIPPING, enquanto
@@ -171,15 +252,34 @@ se apoiando em placeholders.
 
 19 erros em 5.375. A distribuição deles não é aleatória:
 
-| Real → Previsto | N |
-|---|---|
-| SHIPPING → ACCOUNT | 7 |
-| PAYMENT → ACCOUNT | 5 |
-| PAYMENT → CANCEL | 2 |
-| CONTACT → ACCOUNT | 1 |
-| ORDER → ACCOUNT | 1 |
-| PAYMENT → DELIVERY | 1 |
-| SUBSCRIPTION → REFUND | 1 |
+| Real → Previsto       | N   |
+| --------------------- | --- |
+| SHIPPING → ACCOUNT    | 7   |
+| PAYMENT → ACCOUNT     | 5   |
+| PAYMENT → CANCEL      | 2   |
+| CONTACT → ACCOUNT     | 1   |
+| ORDER → ACCOUNT       | 1   |
+| PAYMENT → CONTACT     | 1   |
+| PAYMENT → DELIVERY    | 1   |
+| SUBSCRIPTION → REFUND | 1   |
+
+Saída direta do script (o pandas omite o rótulo `PAYMENT` repetido nas linhas
+seguintes do mesmo grupo):
+
+```
+Total de erros no teste: 19
+
+Pares (real -> previsto) mais frequentes:
+real          previsto
+SHIPPING      ACCOUNT     7
+PAYMENT       ACCOUNT     5
+              CANCEL      2
+CONTACT       ACCOUNT     1
+ORDER         ACCOUNT     1
+PAYMENT       CONTACT     1
+              DELIVERY    1
+SUBSCRIPTION  REFUND      1
+```
 
 **Padrão 1: 14 dos 19 erros vão para ACCOUNT**, a classe majoritária (22% do
 dataset). Esse é o comportamento clássico de um classificador quando o sinal
@@ -188,12 +288,24 @@ desaparece: sem evidência no vetor, ele cai no prior.
 **Padrão 2: o sinal desaparece por ruído de digitação.** Os exemplos errados
 mostram exatamente isso:
 
-| Texto | Real | Previsto |
-|---|---|---|
-| `help me to check the acceptedpayment modalities` | PAYMENT | CANCEL |
-| `where do i report an issue with paynents` | PAYMENT | ACCOUNT |
-| `i dont know what i need to do to correct theaddress` | SHIPPING | ACCOUNT |
-| `can i pay witj visa` | PAYMENT | ACCOUNT |
+| Texto                                                 | Real     | Previsto |
+| ----------------------------------------------------- | -------- | -------- |
+| `help me to check the acceptedpayment modalities`     | PAYMENT  | CANCEL   |
+| `where do i report an issue with paynents`            | PAYMENT  | ACCOUNT  |
+| `i dont know what i need to do to correct theaddress` | SHIPPING | ACCOUNT  |
+| `can i pay witj visa`                                 | PAYMENT  | ACCOUNT  |
+
+Amostra aleatória de 5 erros, saída direta do script:
+
+```
+Alguns exemplos de erro para discutir no relatório:
+                                                  texto      real previsto
+5177    help me to check the acceptedpayment modalities   PAYMENT   CANCEL
+18116          where do i report an issue with paynents   PAYMENT  ACCOUNT
+2473  i dont know what i need to do to correct theaddress SHIPPING  ACCOUNT
+166   would you give me information about cancelling orders?  ORDER  ACCOUNT
+4949                                can i pay witj visa   PAYMENT  ACCOUNT
+```
 
 `paynents`, `witj`, `acceptedpayment`, `theaddress`: palavra concatenada ou letra
 trocada. O token não existe no vocabulário TF-IDF, é descartado, e o texto perde a
@@ -265,6 +377,56 @@ para o caso de a similaridade passar do limiar mas o conteúdo não servir.
 A camada 1 não é redundante em relação à camada 2 — ela é o que evita gastar
 latência e cota de LLM numa pergunta que já se sabe fora de escopo. Ver 7.2.
 
+**Demonstração das duas camadas.** Saída de `python fase2_rag.py`, com duas
+perguntas dentro do domínio e uma fora:
+
+```
+Total de chunks: 27
+Índice pronto: 27 chunks x 384 dimensões
+
+======================================================================
+PERGUNTA: How do I cancel my order?
+
+RESPOSTA: Para que eu possa te ajudar a cancelar o seu pedido, por favor,
+informe o número do pedido e faça a sua pergunta específica sobre o
+cancelamento. Estarei à disposição para te fornecer as informações
+necessárias e te auxiliar no que for preciso.
+FONTES RECUPERADAS (similaridade | seção):
+  0.683 | ## [ORDER] cancel_order
+  0.55 | ## [CANCEL] check_cancellation_fee
+  0.433 | ## [ORDER] place_order
+
+======================================================================
+PERGUNTA: I want to get a refund, what should I do?
+
+RESPOSTA: Para dar início ao processo de reembolso, por favor, forneça mais
+detalhes sobre a situação ou incidente específico que motivou a sua
+solicitação. Com essas informações, poderei orientar você com os passos
+exatos e adequados ao seu caso.
+
+Além disso, você pode consultar a nossa política de reembolso acessando o
+nosso site e navegando até a seção "FAQ" ou "Termos e Condições", onde
+encontrará detalhes sobre o processo de reembolso, critérios de
+elegibilidade e requisitos específicos.
+FONTES RECUPERADAS (similaridade | seção):
+  0.617 | ## [REFUND] check_refund_policy
+  0.551 | ## [REFUND] get_refund
+  0.549 | ## [REFUND] track_refund
+
+======================================================================
+PERGUNTA: What is the capital of France?
+
+RESPOSTA: Não encontrei essa informação na base de conhecimento.
+FONTES RECUPERADAS (similaridade | seção):
+```
+
+Os três casos mostram o comportamento desejado: recuperação relevante (as seções
+recuperadas são exatamente as do assunto perguntado), resposta ancorada no contexto
+(a segunda resposta reproduz a orientação da base sobre onde consultar a política,
+sem inventar prazos ou percentuais), e a proteção contra alucinação disparando na
+pergunta fora do domínio — sem nenhuma fonte listada, porque nenhuma passou do
+limiar.
+
 ### 5.4 Auditabilidade (diferencial)
 
 Toda resposta vem acompanhada dos trechos que a embasaram e da similaridade de cada
@@ -292,8 +454,15 @@ resposta e fontes; `GET /health` para checagem de disponibilidade.
 caracteres é rejeitado com **422** e o detalhe do campo, antes de chegar ao modelo:
 
 ```json
-{"detail":[{"type":"string_too_short","loc":["body","texto"],
-  "msg":"String should have at least 3 characters"}]}
+{
+  "detail": [
+    {
+      "type": "string_too_short",
+      "loc": ["body", "texto"],
+      "msg": "String should have at least 3 characters"
+    }
+  ]
+}
 ```
 
 A saída também é tipada (`response_model=Resposta`), o que garante o contrato e
@@ -311,14 +480,91 @@ qualquer lugar. Se um artefato faltar, o startup falha com uma mensagem que diz 
 script rodar. E se o Gemini bloquear a geração por filtro de segurança (`resp.text`
 vem `None`), a resposta cai na mensagem padrão em vez de estourar um 500.
 
+**Degradação graciosa na falha do LLM.** Esta proteção foi acrescentada depois de um
+achado durante o teste do contêiner: uma requisição dentro do domínio retornou
+**500 Internal Server Error**, e o log mostrou a causa real —
+`ServerError: 503 UNAVAILABLE ... This model is currently experiencing high demand`.
+Não era bug do código, era o Gemini momentaneamente indisponível. Mas o
+comportamento estava errado: o LLM é a única dependência externa do sistema e a que
+mais falha (cota, 503 por demanda, rede), e uma falha dela derrubava a requisição
+inteira — jogando fora a classificação e a recuperação, que já tinham funcionado.
+
+A API agora captura `genai.errors.APIError` e responde **200** com a categoria, as
+fontes recuperadas e um aviso de que a geração não saiu:
+
+```console
+$ curl -X POST .../solicitacao -d '{"texto":"How do I cancel my order?"}'
+   # contêiner rodando com uma chave inválida, para forçar a falha
+
+{"categoria":"ORDER",
+ "resposta":"Não foi possível gerar a resposta agora: o serviço de geração está
+ temporariamente indisponível. Os trechos da base relevantes para esta
+ solicitação estão listados em 'fontes'.",
+ "fontes":[{"similaridade":0.683,"secao":"## [ORDER] cancel_order"},
+           {"similaridade":0.55,"secao":"## [CANCEL] check_cancellation_fee"},
+           {"similaridade":0.433,"secao":"## [ORDER] place_order"}]}
+[HTTP 200 | 0.442357s]
+
+# no log do contêiner:
+[WARN] Gemini indisponível (400): geração degradada.
+```
+
+O atendente continua recebendo o roteamento correto e os trechos certos da base —
+degradado, mas útil. É a diferença entre um serviço que fica indisponível junto com
+sua dependência e um que perde só a parte que dependia dela.
+
 ### Verificação ponta a ponta
 
-| Caso | Entrada | Resultado |
-|---|---|---|
-| Dentro do domínio | `How do I cancel my order?` | 200, categoria ORDER, resposta com 3 fontes |
-| Fora do domínio | `What is the capital of France?` | 200, mensagem de "não encontrei", `fontes: []` |
-| Entrada inválida | `ab` | 422 com detalhe do campo |
-| Disponibilidade | `GET /health` | 200, `{"status":"ok"}` |
+| Caso              | Entrada                          | Resultado                                      |
+| ----------------- | -------------------------------- | ---------------------------------------------- |
+| Dentro do domínio | `How do I cancel my order?`      | 200, categoria ORDER, resposta com 3 fontes    |
+| Fora do domínio   | `What is the capital of France?` | 200, mensagem de "não encontrei", `fontes: []` |
+| Entrada inválida  | `ab`                             | 422 com detalhe do campo                       |
+| Disponibilidade   | `GET /health`                    | 200, `{"status":"ok"}`                         |
+
+Transcrição da execução, com o servidor rodando via `uvicorn api.main:app`:
+
+```console
+$ curl -X POST http://127.0.0.1:8000/solicitacao \
+    -H "Content-Type: application/json" \
+    -d '{"texto":"How do I cancel my order?"}'
+
+{"categoria":"ORDER",
+ "resposta":"Compreendo que você tem uma dúvida sobre o cancelamento do seu
+ pedido. Estou aqui para te fornecer as informações necessárias! Por favor, me
+ informe o número do seu pedido (e os detalhes da sua dúvida) para que eu possa
+ te auxiliar no processo.",
+ "fontes":[{"similaridade":0.683,"secao":"## [ORDER] cancel_order"},
+           {"similaridade":0.55,"secao":"## [CANCEL] check_cancellation_fee"},
+           {"similaridade":0.433,"secao":"## [ORDER] place_order"}]}
+[HTTP 200 | 9.561140s]
+
+$ curl -X POST ... -d '{"texto":"What is the capital of France?"}'
+
+{"categoria":"ACCOUNT",
+ "resposta":"Não encontrei essa informação na base de conhecimento.",
+ "fontes":[]}
+[HTTP 200 | 0.115337s]
+
+$ curl -X POST ... -d '{"texto":"ab"}'
+
+{"detail":[{"type":"string_too_short","loc":["body","texto"],
+            "msg":"String should have at least 3 characters",
+            "input":"ab","ctx":{"min_length":3}}]}
+[HTTP 422]
+
+$ curl http://127.0.0.1:8000/health
+{"status":"ok"}
+[HTTP 200]
+```
+
+Vale notar um detalhe do segundo caso: a categoria devolvida é ACCOUNT, porque o
+classificador **sempre** devolve uma das 11 classes — ele não tem opção de "nenhuma".
+Para "What is the capital of France?" essa predição é lixo, e é o RAG que salva a
+resposta ao dizer que não sabe. Isso ilustra a assimetria entre os dois componentes:
+o RAG sabe reconhecer que está fora do domínio, o classificador não. Um sistema de
+produção usaria a confiança do classificador (seção 7.1) para marcar a categoria como
+incerta em vez de afirmá-la.
 
 ## 7. Componente D — Reflexão sobre operação
 
@@ -337,12 +583,44 @@ dificilmente vêm da mesma distribuição.
 Dois sinais monitorados: a **confiança do modelo** (máximo da `predict_proba`) e o
 **tamanho do texto** em palavras. Resultados medidos:
 
-| Cenário simulado | Confiança (média) | KS confiança | Tamanho | Veredito |
-|---|---|---|---|---|
-| Controle (mesma distribuição) | 0,942 → 0,945 | p = 0,41 | p = 0,66 | sem drift |
-| 30% de erros de digitação | 0,942 → **0,812** | p = 7e-134 | p = 0,96 | **drift** |
-| Textos mais longos (canal novo) | 0,942 → **0,742** | p < 1e-300 | p ≈ 0 | **drift** |
-| Assunto fora das 11 classes | 0,942 → **0,425** | p ≈ 0 | p = 5e-270 | **drift** |
+| Cenário simulado                | Confiança (média) | KS confiança | Tamanho    | Veredito  |
+| ------------------------------- | ----------------- | ------------ | ---------- | --------- |
+| Controle (mesma distribuição)   | 0,942 → 0,945     | p = 0,41     | p = 0,66   | sem drift |
+| 30% de erros de digitação       | 0,942 → **0,812** | p = 7e-134   | p = 0,96   | **drift** |
+| Textos mais longos (canal novo) | 0,942 → **0,742** | p < 1e-300   | p ≈ 0      | **drift** |
+| Assunto fora das 11 classes     | 0,942 → **0,425** | p ≈ 0        | p = 5e-270 | **drift** |
+
+Saída direta de `python monitoramento_drift.py`:
+
+```
+==================================================================
+CENÁRIO: controle - mesma distribuição
+==================================================================
+  confianca    média   0.942 ->   0.945 | KS=0.0243 p=4.11e-01 | estável
+  n_palavras   média   8.753 ->   8.661 | KS=0.0200 p=6.58e-01 | estável
+  --> Veredito: sem drift detectado
+
+==================================================================
+CENÁRIO: drift de ruído - erros de digitação
+==================================================================
+  confianca    média   0.942 ->   0.812 | KS=0.3360 p=7.38e-134 | DRIFT
+  n_palavras   média   8.753 ->   8.700 | KS=0.0140 p=9.55e-01 | estável
+  --> Veredito: ALERTA, investigar
+
+==================================================================
+CENÁRIO: drift de canal - textos mais longos
+==================================================================
+  confianca    média   0.942 ->   0.742 | KS=0.6867 p=9.49e-322 | DRIFT
+  n_palavras   média   8.753 ->  32.620 | KS=1.0000 p=0.00e+00 | DRIFT
+  --> Veredito: ALERTA, investigar
+
+==================================================================
+CENÁRIO: drift de assunto - categoria fora do treino
+==================================================================
+  confianca    média   0.942 ->   0.425 | KS=0.9715 p=0.00e+00 | DRIFT
+  n_palavras   média   8.753 ->  10.400 | KS=0.4725 p=5.20e-270 | DRIFT
+  --> Veredito: ALERTA, investigar
+```
 
 Três leituras importam aqui:
 
@@ -369,12 +647,12 @@ branco.
 
 Latências medidas na verificação da seção 6:
 
-| Caminho | Latência |
-|---|---|
-| Classificador (TF-IDF + LogReg) | poucos milissegundos |
-| Busca semântica (27 chunks) | ~10 ms |
-| Curto-circuito (fora do domínio, sem LLM) | **0,115 s** |
-| Pipeline completo com chamada ao Gemini | **9,56 s** |
+| Caminho                                   | Latência             |
+| ----------------------------------------- | -------------------- |
+| Classificador (TF-IDF + LogReg)           | poucos milissegundos |
+| Busca semântica (27 chunks)               | ~10 ms               |
+| Curto-circuito (fora do domínio, sem LLM) | **0,115 s**          |
+| Pipeline completo com chamada ao Gemini   | **9,56 s**           |
 
 A chamada ao LLM domina o tempo total em duas ordens de magnitude — o caminho com
 LLM é **83x mais lento** que o caminho sem. Isso tem três consequências práticas:
@@ -397,9 +675,12 @@ mais de um chunk, ou está fraseada de um jeito que a resposta canônica não co
 evolução natural seria uma banda: acima de ~0,85 de similaridade devolver o chunk
 direto; entre 0,30 e 0,85 chamar o LLM; abaixo de 0,30 dizer que não sabe.
 
-O tier gratuito do Gemini tem limite de requisições por minuto. Em produção isso
-exigiria fila com retry e backoff — hoje uma rajada de requisições simultâneas
-receberia erro de cota.
+O tier gratuito do Gemini tem limite de requisições por minuto, e a
+indisponibilidade não é hipotética: durante o teste do contêiner o modelo devolveu
+`503 UNAVAILABLE` por demanda alta (seção 6). Hoje a API degrada graciosamente nesse
+caso — responde 200 com categoria e fontes, sem a resposta gerada. O que ainda falta
+para produção é fila com retry e backoff exponencial, para que uma indisponibilidade
+de poucos segundos seja absorvida em vez de repassada ao usuário.
 
 ### 7.3 Limites honestos do sistema
 
@@ -442,7 +723,52 @@ O `modelo_classificador.joblib` está versionado no repositório, então a API s
 precisar retreinar. Os `random_state` estão fixos em 42 no split e nas amostragens do
 script de drift, então os números deste relatório são reproduzíveis.
 
-`Dockerfile` incluído: `docker build -t assistente-suporte .` e
-`docker run --rm -p 8000:8000 --env-file .env assistente-suporte`. O modelo de
-embeddings é baixado durante o build, não no primeiro startup, para o contêiner
-subir pronto para atender.
+### Containerização (diferencial)
+
+```bash
+docker build -t assistente-suporte .
+docker run --rm -p 8000:8000 --env-file .env assistente-suporte
+```
+
+Build verificado: **exit 0**, imagem `assistente-suporte:latest` de **3,29 GB**. O
+contêiner sobe e atende:
+
+```console
+$ docker run -d --name as-test -p 8000:8000 --env-file .env assistente-suporte
+$ docker logs as-test
+Carregando artefatos...
+Pronto: classificador + 27 chunks indexados.
+INFO:     Application startup complete.
+
+$ curl -X POST .../solicitacao -d '{"texto":"I want to get a refund"}'
+{"categoria":"REFUND","resposta":"Com certeza, posso ajudar você com os passos
+ necessários para obter o seu reembolso...","fontes":[...]}
+[HTTP 200]
+
+$ curl .../health
+{"status":"ok"}
+[HTTP 200]
+```
+
+Três decisões no `Dockerfile` valem menção:
+
+- **`requirements.txt` copiado antes do código.** O `pip install` leva ~6 minutos;
+  em camada própria, ele só é refeito quando as dependências mudam, não a cada
+  alteração de código.
+- **Modelo de embeddings baixado no build.** Sem isso, o primeiro startup do
+  contêiner faria o download de ~90 MB e o `/health` ficaria indisponível por vários
+  segundos — justamente durante o health check de um orquestrador.
+- **A chave nunca entra na imagem.** Vem por `--env-file` em tempo de execução; o
+  `.dockerignore` exclui o `.env` do contexto de build.
+
+**Ponto aberto:** a imagem tem 3,29 GB porque o wheel padrão do `torch` para Linux
+inclui as bibliotecas CUDA (o build puxou `cuda-toolkit` e `cuda-bindings`), que são
+inúteis aqui — a inferência dos embeddings roda em CPU. Instalar o wheel CPU-only
+(`--extra-index-url https://download.pytorch.org/whl/cpu`) reduziria a imagem a uma
+fração disso. Não foi feito para manter o `requirements.txt` idêntico ao ambiente de
+desenvolvimento onde as métricas deste relatório foram medidas.
+
+**Nota de versão:** o ambiente de desenvolvimento é Python 3.9.6 e a imagem usa
+`python:3.11-slim`. Os pins do `requirements.txt` resolvem nas duas versões (o
+`pip install` do build concluiu sem conflito) e o `.joblib` treinado em 3.9 carrega
+sem problema em 3.11, por ser o mesmo `scikit-learn` 1.6.1.
