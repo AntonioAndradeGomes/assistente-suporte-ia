@@ -4,16 +4,53 @@ Projeto final, Módulo 8 (IA e Aprendizado de Máquina).
 
 ---
 
+## Resumo
+
+Sistema ponta a ponta que recebe o texto de uma solicitação de cliente, classifica o
+assunto em uma de 11 categorias e responde a dúvida com base numa base de
+conhecimento via RAG, servido por uma API FastAPI.
+
+| Componente | Resultado |
+| --- | --- |
+| **A** — Classificador | TF-IDF + regressão logística, **F1 macro 0,9964** (vs. 0,9958 do Naive Bayes). Split estratificado antes da vetorização, TF-IDF dentro do `Pipeline` |
+| **A** — XAI | Importância de termos por coeficiente e análise dos 19 erros, que revelou dependência de artefatos do template e fragilidade a typos |
+| **B** — RAG | 27 chunks indexados com `all-MiniLM-L6-v2`, busca por cosseno, geração ancorada no Gemini, proteção contra alucinação em duas camadas |
+| **C** — API | `POST /solicitacao` e `GET /health`, validação Pydantic, modelo serializado carregado uma vez no startup, degradação graciosa se o LLM cair |
+| **D** — Operação | Drift detectado com Kolmogorov-Smirnov em 4 cenários, custo e latência medidos, limites e pontos abertos declarados |
+| Diferenciais | Fontes auditáveis no RAG, detecção de drift implementada, containerização verificada |
+
+A conclusão mais importante deste relatório é negativa e está na
+[seção 3.4](#34-discussão-honesta-por-que-0996-não-é-um-número-para-se-orgulhar): o F1
+de 0,9964 mede a separabilidade de um dataset sintético, não a dificuldade de
+classificar suporte real. Investiguei a hipótese de leakage, descartei com medição, e
+identifiquei a causa verdadeira.
+
+## Índice
+
+1. [O problema](#1-o-problema)
+2. [Os dados](#2-os-dados)
+3. [Componente A — Classificador](#3-componente-a--classificador)
+4. [Interpretabilidade e análise de erros](#4-interpretabilidade-e-análise-de-erros)
+5. [Componente B — RAG](#5-componente-b--rag)
+6. [Componente C — API](#6-componente-c--api)
+7. [Componente D — Reflexão sobre operação](#7-componente-d--reflexão-sobre-operação)
+8. [Reprodutibilidade](#8-reprodutibilidade)
+
 ## 1. O problema
 
 Uma equipe de suporte que recebe centenas de mensagens por dia gasta tempo em duas
-tarefas mecânicas: descobrir para qual setor cada mensagem vai, e procurar na base
-de conhecimento a informação que responde o cliente. O sistema automatiza as duas.
+tarefas mecânicas: descobrir para qual setor cada mensagem vai, e procurar na base de
+conhecimento a informação que responde o cliente. O sistema automatiza as duas.
 
-Dado o texto de uma solicitação, ele devolve a categoria prevista (para roteamento)
-e uma resposta fundamentada na base de conhecimento, com os trechos que a
-embasaram. O objetivo não é substituir o atendente, e sim entregar a ele uma
-sugestão auditável: ele vê a resposta e vê de onde ela saiu.
+Dado o texto de uma solicitação, ele devolve a categoria prevista (para roteamento) e
+uma resposta fundamentada na base de conhecimento, acompanhada dos trechos que a
+embasaram.
+
+O objetivo declarado **não** é substituir o atendente, e essa escolha condiciona
+várias decisões técnicas adiante. Como a saída é uma sugestão para um humano revisar,
+o sistema pode assumir latência de segundos (seção 7.2) e pode errar a categoria sem
+consequência direta para o cliente — em troca, tem a obrigação de ser auditável: o
+atendente precisa ver de onde a resposta saiu para decidir se confia nela.
 
 ## 2. Os dados
 
@@ -38,13 +75,9 @@ roteia uma mensagem para REFUND, a base do RAG tem conteúdo sobre reembolso.
 
 ![Distribuição das categorias](distribuicao_categorias.png)
 
-**Tamanho dos textos:** média de 8,7 palavras (desvio 2,6; mínimo 1; máximo 16).
-São mensagens curtas e uniformes — um fato que volta a ser importante na seção 3.4.
+**Tamanho dos textos**, saída do `describe()`:
 
 ```
-Total de exemplos: 26872
-
-Tamanho dos textos (palavras):
 count    26872.000000
 mean         8.690979
 std          2.605004
@@ -52,6 +85,10 @@ min          1.000000
 50%          9.000000
 max         16.000000
 ```
+
+Mensagens curtas e, mais importante, muito uniformes: desvio de 2,6 palavras em torno
+de uma média de 8,7, e nenhuma passando de 16 palavras. Essa regularidade é o primeiro
+indício de que o dataset é gerado por template, e volta a ser decisiva na seção 3.4.
 
 ## 3. Componente A — Classificador
 
@@ -513,7 +550,7 @@ O atendente continua recebendo o roteamento correto e os trechos certos da base 
 degradado, mas útil. É a diferença entre um serviço que fica indisponível junto com
 sua dependência e um que perde só a parte que dependia dela.
 
-### Verificação ponta a ponta
+### 6.1 Verificação ponta a ponta
 
 | Caso              | Entrada                          | Resultado                                      |
 | ----------------- | -------------------------------- | ---------------------------------------------- |
@@ -713,6 +750,24 @@ prova de conceito. O monitoramento descrito em 7.1 pressupõe log por requisiç�
 classes que viu. A detecção de drift avisa que algo mudou, mas a correção — definir
 a nova categoria, rotular exemplos, retreinar — é trabalho humano.
 
+### 7.4 Pontos abertos e próximos passos
+
+Os itens abaixo foram identificados durante o desenvolvimento e **deixados em aberto
+de forma deliberada**, não por descuido. Cada um traz o motivo e a correção conhecida.
+
+| # | Ponto aberto | Por que ficou aberto | Correção |
+| --- | --- | --- | --- |
+| 1 | **Imagem Docker de 3,29 GB.** O wheel padrão do `torch` para Linux embute as bibliotecas CUDA — o build baixou `cuda-toolkit` e `cuda-bindings`, que nunca são usados, porque a inferência dos embeddings roda em CPU | Trocar o wheel exigiria um `requirements.txt` diferente do ambiente onde todas as métricas deste relatório foram medidas. Preferi manter a correspondência exata entre o que foi medido e o que está declarado | Instalar o wheel CPU-only: `pip install torch --extra-index-url https://download.pytorch.org/whl/cpu`, ou pinar `torch==2.8.0+cpu`. Reduz a imagem a uma fração do tamanho, sem efeito sobre o resultado |
+| 2 | **Base do RAG com 2.400 palavras**, no limite inferior do que justifica chunking | A base é derivada do dataset, e há só uma resposta canônica por intenção. Ampliar com FAQ externo quebraria a coerência de fonte única defendida na seção 2 | Tomar 3-4 respostas por intenção em vez de uma (`groupby().head(4)` em vez de `.iloc[0]`), triplicando a base sem sair do mesmo dataset |
+| 3 | **Fragilidade a typos** no classificador (seção 4.2) | Adicionar features de caractere mudaria o modelo depois de as métricas estarem medidas e o `.joblib` serializado | `FeatureUnion` combinando o TF-IDF de palavras com um `analyzer="char_wb"`, `ngram_range=(3,5)`. `paynents` e `payments` compartilham trigramas, então o sinal sobrevive |
+| 4 | **Sem métrica de recuperação do RAG** (recall@k) | Exigiria construir à mão um conjunto de pares pergunta → trecho correto, que é trabalho de anotação, não de código | Escrever ~30 perguntas com o chunk esperado e medir recall@3. É o próximo passo mais valioso para o Componente B |
+| 5 | **Sem retry com backoff** na chamada ao LLM (seção 7.2) | A degradação graciosa já evita o 500, que era o problema urgente | `tenacity` já vem como dependência transitiva do `google-genai`; bastaria decorar a chamada com retry exponencial em `ServerError` |
+| 6 | **Sem log estruturado por requisição** | O monitoramento da seção 7.1 foi validado offline, com simulação | Logar predição, confiança e tamanho do texto em JSON a cada requisição. É pré-requisito para o job diário de KS descrito em 7.1 |
+
+Se eu tivesse mais tempo, a ordem seria 4, 6, 3 — porque medir a recuperação e ter
+log por requisição são o que transformaria as afirmações qualitativas deste relatório
+em números, e o item 3 é o único que melhoraria o modelo em si.
+
 ## 8. Reprodutibilidade
 
 Dependências pinadas em `requirements.txt`; instruções de execução no `README.md`;
@@ -723,7 +778,7 @@ O `modelo_classificador.joblib` está versionado no repositório, então a API s
 precisar retreinar. Os `random_state` estão fixos em 42 no split e nas amostragens do
 script de drift, então os números deste relatório são reproduzíveis.
 
-### Containerização (diferencial)
+### 8.1 Containerização (diferencial)
 
 ```bash
 docker build -t assistente-suporte .
@@ -761,12 +816,8 @@ Três decisões no `Dockerfile` valem menção:
 - **A chave nunca entra na imagem.** Vem por `--env-file` em tempo de execução; o
   `.dockerignore` exclui o `.env` do contexto de build.
 
-**Ponto aberto:** a imagem tem 3,29 GB porque o wheel padrão do `torch` para Linux
-inclui as bibliotecas CUDA (o build puxou `cuda-toolkit` e `cuda-bindings`), que são
-inúteis aqui — a inferência dos embeddings roda em CPU. Instalar o wheel CPU-only
-(`--extra-index-url https://download.pytorch.org/whl/cpu`) reduziria a imagem a uma
-fração disso. Não foi feito para manter o `requirements.txt` idêntico ao ambiente de
-desenvolvimento onde as métricas deste relatório foram medidas.
+O tamanho da imagem (3,29 GB) é um ponto aberto conhecido, com causa identificada e
+correção documentada no item 1 da [seção 7.4](#74-pontos-abertos-e-próximos-passos).
 
 **Nota de versão:** o ambiente de desenvolvimento é Python 3.9.6 e a imagem usa
 `python:3.11-slim`. Os pins do `requirements.txt` resolvem nas duas versões (o

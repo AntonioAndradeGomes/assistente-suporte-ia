@@ -151,3 +151,8 @@ docker run --rm -p 8000:8000 --env-file .env assistente-suporte
 Build verificado (imagem de 3,29 GB); o contêiner sobe e responde em
 <http://127.0.0.1:8000/docs>. A `GEMINI_API_KEY` vem do `--env-file` em tempo de
 execução e nunca entra na imagem.
+
+A imagem é grande porque o wheel padrão do `torch` para Linux embute as bibliotecas
+CUDA, inúteis aqui — a inferência roda em CPU. Este e os outros pontos abertos do
+projeto estão documentados, com a correção de cada um, na
+[seção 7.4 do relatório](RELATORIO.md#74-pontos-abertos-e-próximos-passos).
